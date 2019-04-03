@@ -655,7 +655,8 @@ public class ElasticSearchDruidDataSource extends DruidDataSource {
 
     @Override
     public Connection createPhysicalConnection(String url, Properties info) throws SQLException {
-        Connection conn = new ElasticSearchConnection(url);
+        Connection conn = this.username == null ? new ElasticSearchConnection(url)
+                : new ElasticSearchConnection(url, this.username, this.password);
         createCount.incrementAndGet();
 
         return conn;

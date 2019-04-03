@@ -1,10 +1,13 @@
 package com.alibaba.druid.pool;
 
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
+import org.elasticsearch.xpack.client.PreBuiltXPackTransportClient;
 
 import java.io.InputStream;
 import java.io.Reader;
@@ -21,8 +24,48 @@ import java.util.concurrent.Executor;
  * Created by allwefantasy on 8/30/16.
  */
 public class ElasticSearchConnection implements Connection {
+    private final static Log LOG = LogFactory.getLog(ElasticSearchConnection.class);
 
     private Client client;
+
+    public ElasticSearchConnection(String jdbcUrl, String username, String password) {
+        try {
+            for (Map.Entry<Object, Object> entry : System.getProperties().entrySet()) {
+                LOG.info(String.format("======== key = %s, value = %s ===========", entry.getKey(), entry.getValue()));
+                LOG.info(String.format("======== user = %s, pass = %s ===========", username, password));
+            }
+            validateRequired(System.getProperties(), "xpack.ssl.verification_mode", "xpack.ssl.keystore.path",
+                    "xpack.ssl.truststore.path", "xpack.security.transport.ssl.enabled");
+            Settings settings = Settings.builder().put("client.transport.ignore_cluster_name", true)
+                    .put("xpack.security.user", username + ":" + password)
+                    .put("xpack.ssl.verification_mode", System.getProperty("xpack.ssl.verification_mode"))
+                    .put("xpack.ssl.keystore.path", System.getProperty("xpack.ssl.keystore.path"))
+                    .put("xpack.ssl.truststore.path", System.getProperty("xpack.ssl.truststore.path"))
+                    .put("xpack.security.transport.ssl.enabled", System.getProperty("xpack.security.transport.ssl.enabled"))
+                    .build();
+            TransportClient transportClient = new PreBuiltXPackTransportClient(settings);
+            String hostAndPortArrayStr = jdbcUrl.split("/")[2];
+            String[] hostAndPortArray = hostAndPortArrayStr.split(",");
+            for (String hostAndPort : hostAndPortArray) {
+                String host = hostAndPort.split(":")[0];
+                String port = hostAndPort.split(":")[1];
+                transportClient
+                        .addTransportAddress(new TransportAddress(InetAddress.getByName(host), Integer.parseInt(port)));
+            }
+            client = transportClient;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void validateRequired(Properties env, String... keys) throws Exception {
+        for (String key : keys) {
+            if (!env.containsKey(key)) {
+                throw new Exception(key + " is required in System Properties.");
+            }
+        }
+    }
+
 
     public ElasticSearchConnection(String jdbcUrl) {
 
